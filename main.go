@@ -7,16 +7,15 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/cpustejovksy/cns/logger"
 	"github.com/cpustejovksy/cns/store"
-	"github.com/gorilla/mux"
 )
 
 var s store.Store = store.New()
 
 // KeyValueGetHanlder expect to be called with a GET request for the "/v1/key/{key} resource"
 func KeyValueGetHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	key := vars["key"]
+	key := r.PathValue("key")
 	if key == "" {
 		http.Error(w, "provide key", http.StatusBadRequest)
 		return
@@ -37,8 +36,7 @@ func KeyValueGetHandler(w http.ResponseWriter, r *http.Request) {
 
 // KeyValuePutHanlder expect to be called with a PUT request for the "/v1/key/{key} resource"
 func KeyValuePutHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	key := vars["key"]
+	key := r.PathValue("key")
 	if key == "" {
 		http.Error(w, "provide key", http.StatusBadRequest)
 		return
@@ -59,8 +57,7 @@ func KeyValuePutHandler(w http.ResponseWriter, r *http.Request) {
 
 // KeyValueDeleteHandler expects to be called with a DELETE request for the "/v1/key/{key} resource"
 func KeyValueDeleteHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	key := vars["key"]
+	key := r.PathValue("key")
 	if key == "" {
 		http.Error(w, "provide key", http.StatusBadRequest)
 		return
@@ -73,10 +70,40 @@ func KeyValueDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
+func initializeTransactionLog(s *store.Store) error {
+	ftl, err := logger.NewFileTransactionLogger("transaction.log")
+	if err != nil {
+		return fmt.Errorf("failed to create event logger: %w", err)
+	}
+	events, errors := ftl.ReadEvents()
+	e := logger.Event{}
+	ok := true
+
+	for ok && err != nil {
+		select {
+		case err, ok = <-errors:
+		case e, ok = <-events:
+			switch e.EventType {
+			case logger.EventDelete:
+				err = s.Delete(e.Key)
+			case logger.EventPut:
+				err = s.Put(e.Key, e.Value)
+			}
+		}
+	}
+
+	ftl.Run()
+
+	return err
+}
 func main() {
-	r := mux.NewRouter()
-	r.HandleFunc("/v1/key/{key}", KeyValuePutHandler).Methods(http.MethodPut)
-	r.HandleFunc("/v1/key/{key}", KeyValueGetHandler).Methods(http.MethodGet)
-	r.HandleFunc("/v1/key/{key}", KeyValueDeleteHandler).Methods(http.MethodDelete)
+	err := initializeTransactionLog(s)
+	if err != nil {
+		log.Fatal(err)
+	}
+	r := http.NewServeMux()
+	r.HandleFunc(http.MethodPut+" "+"/v1/key/{key}", KeyValuePutHandler)
+	r.HandleFunc(http.MethodGet+" "+"/v1/key/{key}", KeyValueGetHandler)
+	r.HandleFunc(http.MethodDelete+" "+"/v1/key/{key}", KeyValueDeleteHandler)
 	log.Fatal(http.ListenAndServe(":8080", r))
 }
