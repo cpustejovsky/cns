@@ -3,7 +3,9 @@ package logger
 import (
 	"bufio"
 	"fmt"
+	"net/url"
 	"os"
+	"sync"
 )
 
 type FileTransactionLogger struct {
@@ -11,7 +13,10 @@ type FileTransactionLogger struct {
 	errors       <-chan error
 	lastSequence uint64
 	file         *os.File
+	wg           *sync.WaitGroup
 }
+
+const formatString = "%d\t%d\t%s\t%s\n"
 
 func NewFileTransactionLogger(filename string) (*FileTransactionLogger, error) {
 	//os.O_RDWR Opens the file in r/w mode
@@ -23,6 +28,7 @@ func NewFileTransactionLogger(filename string) (*FileTransactionLogger, error) {
 	}
 	ftl := FileTransactionLogger{
 		file: file,
+		wg:   &sync.WaitGroup{},
 	}
 	return &ftl, nil
 }
@@ -30,20 +36,22 @@ func NewFileTransactionLogger(filename string) (*FileTransactionLogger, error) {
 func (l *FileTransactionLogger) Run() {
 	//TODO: make sure this is hiding deadlocks
 	events := make(chan Event, 16)
-	errors := make(chan error, 1)
 	l.events = events
+
+	errors := make(chan error, 1)
 	l.errors = errors
+
 	go func() {
 		for e := range events {
 			l.lastSequence++
 			_, err := fmt.Fprintf(
 				l.file,
-				"%d|\t%d|\t%s|\t%s\n",
+				formatString,
 				l.lastSequence, e.EventType, e.Key, e.Value)
 			if err != nil {
 				errors <- err
-				return
 			}
+			l.wg.Done()
 		}
 	}()
 }
@@ -61,9 +69,11 @@ func (l *FileTransactionLogger) ReadEvents() (<-chan Event, <-chan error) {
 		for scanner.Scan() {
 			line := scanner.Text()
 
-			_, err := fmt.Sscanf(line, "%d\t%d\t%s\t%s", &e.Sequence, &e.EventType, &e.Key, &e.Value)
+			_, err := fmt.Sscanf(
+				line, formatString,
+				&e.Sequence, &e.EventType, &e.Key, &e.Value)
 			if err != nil {
-				outError <- fmt.Errorf("inpurt parse error: %w", err)
+				outError <- err
 				return
 			}
 			if l.lastSequence >= e.Sequence {
@@ -71,8 +81,13 @@ func (l *FileTransactionLogger) ReadEvents() (<-chan Event, <-chan error) {
 				return
 			}
 
+			uv, err := url.QueryUnescape(e.Value)
+			if err != nil {
+				outError <- fmt.Errorf("value decoding failurefor Value '%s':\t%w", e.Value, err)
+				return
+			}
+			e.Value = uv
 			l.lastSequence = e.Sequence
-
 			outEvent <- e
 		}
 
@@ -84,19 +99,40 @@ func (l *FileTransactionLogger) ReadEvents() (<-chan Event, <-chan error) {
 
 	return outEvent, outError
 }
+func (l *FileTransactionLogger) Wait() {
+	l.wg.Wait()
+}
+
+func (l *FileTransactionLogger) Close() error {
+	l.Wait()
+
+	if l.events != nil {
+		close(l.events)
+	}
+
+	return l.file.Close()
+}
+
 func (l *FileTransactionLogger) WritePut(key, value string) {
+	l.wg.Add(1)
 	l.events <- Event{
 		EventType: EventPut,
 		Key:       key,
 		Value:     value,
 	}
 }
+
 func (l *FileTransactionLogger) WriteDelete(key string) {
+	l.wg.Add(1)
 	l.events <- Event{
 		EventType: EventDelete,
 		Key:       key,
 	}
 }
+
 func (l *FileTransactionLogger) Err() <-chan error {
 	return l.errors
+}
+func (l *FileTransactionLogger) LastSequence() uint64 {
+	return l.lastSequence
 }

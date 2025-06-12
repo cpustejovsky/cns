@@ -4,10 +4,10 @@
 ## Next Steps
 * ~~Replace gorilla/mux with std lib~~
 * For file transaction logger
-    * Add tests
-    * Add Close method to gracefully close file
-    * Ensure write buffer is drained on close
-    * Encode keys and values; ensure white-space characters will parse correctly
+    * ~~Add tests~~
+    * ~~Add Close method to gracefully close file~~
+    * ~~Ensure write buffer is drained on close~~
+    * ~~Encode keys and values; ensure white-space characters will parse correctly~~
     * Bound keys and values
     * Converted keys and values to a binary format
     * Solution to retaining deleted values indefinitely

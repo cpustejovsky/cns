@@ -97,7 +97,7 @@ func initializeTransactionLog(s *store.Store) error {
 	return err
 }
 func main() {
-	err := initializeTransactionLog(s)
+	err := initializeTransactionLog(&s)
 	if err != nil {
 		log.Fatal(err)
 	}
