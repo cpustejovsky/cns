@@ -2,15 +2,20 @@ package main
 
 import (
 	"cmp"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"os/user"
 	"runtime"
+	"syscall"
+	"time"
 
 	"github.com/cpustejovksy/cns/logger"
 	"github.com/cpustejovksy/cns/store"
@@ -21,6 +26,7 @@ var (
 	dbhost = flag.String("dbhost", cmp.Or(os.Getenv("pg_host"), host()), "database host to connect to")
 	dbuser = flag.String("dbuser", cmp.Or(os.Getenv("pg_user"), me()), "database user to connect as")
 	dbpw   = flag.String("dbpw", cmp.Or(os.Getenv("pg_pw"), ""), "database password")
+	addr   = flag.String("addr", cmp.Or(os.Getenv("addr"), ":8080"), "address")
 )
 
 func me() string {
@@ -144,5 +150,38 @@ func main() {
 	r.HandleFunc(http.MethodPut+" "+"/v1/key/{key}", KeyValuePutHandler)
 	r.HandleFunc(http.MethodGet+" "+"/v1/key/{key}", KeyValueGetHandler)
 	r.HandleFunc(http.MethodDelete+" "+"/v1/key/{key}", KeyValueDeleteHandler)
-	log.Fatal(http.ListenAndServe(":8080", r))
+	svr := http.Server{
+		Handler: r,
+		Addr:    *addr,
+	}
+	// run server in a goroutine so we can multiplex between signal and error
+	// handling below.
+	errCh := make(chan error, 1)
+	go func() {
+		slog.Info("Server Started", "port", *addr)
+		errCh <- svr.ListenAndServe()
+	}()
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT)
+	defer stop()
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			log.Fatal(err)
+		}
+	case <-ctx.Done():
+		slog.Error("server shutting down", "error", ctx.Err())
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		err := svr.Shutdown(ctx)
+		if err != nil {
+			slog.Error("failed to shutdown server, exiting anyway", "error", err)
+			os.Exit(1)
+
+		}
+		slog.Info("Server shut down successfully")
+
+	}
 }
