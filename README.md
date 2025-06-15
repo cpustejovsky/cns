@@ -15,6 +15,11 @@
     * Close method to clean up open connections
     * drain events channel on close
     * indefinite growth of values
+### TLS
+    * Add TODOs
+### Containerization
+    * Publishable container that uses postgres
+    * Documentation for Dockerfile
 ### Misc.
 * ~~Replace gorilla/mux with std lib~~
 ## Notes from the Cloud Native Go
