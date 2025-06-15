@@ -102,14 +102,14 @@ func KeyValueDeleteHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func initializeTransactionLog(s *store.Store) error {
-	// tl, err := logger.NewFileTransactionLogger("transaction.log")
-	param := logger.PostgresDbParams{
-		Host:     *dbhost,
-		DBName:   *dbname,
-		User:     *dbuser,
-		Password: *dbpw,
-	}
-	tl, err := logger.NewPostgresTransactionLogger(param)
+	tl, err := logger.NewFileTransactionLogger("transaction.log")
+	// param := logger.PostgresDbParams{
+	// 	Host:     *dbhost,
+	// 	DBName:   *dbname,
+	// 	User:     *dbuser,
+	// 	Password: *dbpw,
+	// }
+	// tl, err := logger.NewPostgresTransactionLogger(param)
 	if err != nil {
 		return fmt.Errorf("failed to create event logger: %w", err)
 	}

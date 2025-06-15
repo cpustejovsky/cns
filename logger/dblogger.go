@@ -22,7 +22,7 @@ type PostgresDbParams struct {
 	Password string
 }
 
-const createQuery = `create table transactions (
+const createQuery = `create table if not exists transactions (
 		sequence      bigserial primary key,
 		event_type    smallint,
 		key	      text,
