@@ -1,6 +1,5 @@
 # Cloud Native Service
 
-
 ## Next Steps
 ### File transaction logger
     * ~~Add tests~~
@@ -22,6 +21,9 @@
     * Documentation for Dockerfile
 ### Misc.
 * ~~Replace gorilla/mux with std lib~~
+* Modularize
+* Move handlers and routes to their own package
+
 ## Notes from the Cloud Native Go
 
 ### Idempotent 
