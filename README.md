@@ -2,8 +2,7 @@
 
 
 ## Next Steps
-* ~~Replace gorilla/mux with std lib~~
-* For file transaction logger
+### File transaction logger
     * ~~Add tests~~
     * ~~Add Close method to gracefully close file~~
     * ~~Ensure write buffer is drained on close~~
@@ -11,7 +10,13 @@
     * Bound keys and values
     * Converted keys and values to a binary format
     * Solution to retaining deleted values indefinitely
-
+### PostgreSQL transaction logger
+    * create database if it doesn't exist
+    * Close method to clean up open connections
+    * drain events channel on close
+    * indefinite growth of values
+### Misc.
+* ~~Replace gorilla/mux with std lib~~
 ## Notes from the Cloud Native Go
 
 ### Idempotent 
