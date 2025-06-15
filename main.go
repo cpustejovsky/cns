@@ -1,15 +1,46 @@
 package main
 
 import (
+	"cmp"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"os/user"
+	"runtime"
 
 	"github.com/cpustejovksy/cns/logger"
 	"github.com/cpustejovksy/cns/store"
 )
+
+var (
+	dbname = flag.String("dbname", cmp.Or(os.Getenv("pg_dbname"), "test"), "database name to connect to")
+	dbhost = flag.String("dbhost", cmp.Or(os.Getenv("pg_host"), host()), "database host to connect to")
+	dbuser = flag.String("dbuser", cmp.Or(os.Getenv("pg_user"), me()), "database user to connect as")
+	dbpw   = flag.String("dbpw", cmp.Or(os.Getenv("pg_pw"), ""), "database password")
+)
+
+func me() string {
+	me, err := user.Current()
+	if err != nil {
+		return ""
+	}
+	return me.Username
+}
+
+func host() string {
+	switch runtime.GOOS {
+	case "freebsd", "darwin":
+		return "/tmp"
+	case "linux":
+		return "/var/run/postgresql"
+	default:
+		return ""
+	}
+}
 
 var s store.Store = store.New()
 
@@ -71,11 +102,18 @@ func KeyValueDeleteHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func initializeTransactionLog(s *store.Store) error {
-	ftl, err := logger.NewFileTransactionLogger("transaction.log")
+	// tl, err := logger.NewFileTransactionLogger("transaction.log")
+	param := logger.PostgresDbParams{
+		Host:     *dbhost,
+		DBName:   *dbname,
+		User:     *dbuser,
+		Password: *dbpw,
+	}
+	tl, err := logger.NewPostgresTransactionLogger(param)
 	if err != nil {
 		return fmt.Errorf("failed to create event logger: %w", err)
 	}
-	events, errors := ftl.ReadEvents()
+	events, errors := tl.ReadEvents()
 	e := logger.Event{}
 	ok := true
 
@@ -92,11 +130,12 @@ func initializeTransactionLog(s *store.Store) error {
 		}
 	}
 
-	ftl.Run()
+	tl.Run()
 
 	return err
 }
 func main() {
+	flag.Parse()
 	err := initializeTransactionLog(&s)
 	if err != nil {
 		log.Fatal(err)
